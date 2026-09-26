@@ -1,0 +1,175 @@
+name: Build & Export IPA
+
+on:
+  # Run automatically on push to main/master
+  push:
+    branches: [ main, master ]
+  # Allow manual trigger from GitHub UI (Actions tab → Run workflow)
+  workflow_dispatch:
+    inputs:
+      export_method:
+        description: 'IPA export method'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - ad-hoc
+          - app-store
+
+jobs:
+  build-ipa:
+    name: Build GlucoseDirectApp IPA
+    runs-on: macos-15          # macOS 15 → Xcode 16
+
+    env:
+      SCHEME: GlucoseDirectApp
+      PROJECT: GlucoseDirect.xcodeproj
+      CONFIGURATION: Release
+      ARCHIVE_PATH: ${{ github.workspace }}/build/GlucoseDirectApp.xcarchive
+      EXPORT_PATH:  ${{ github.workspace }}/build/IPA
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Select Xcode version ────────────────────────────────────────
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+      
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      # ── 3. Import code signing certificate & provisioning profile ──────
+      #       Store these as GitHub Secrets:
+      #         SIGNING_CERTIFICATE_P12_DATA  – base64-encoded .p12 file
+      #         SIGNING_CERTIFICATE_PASSWORD  – .p12 password
+      #         PROVISIONING_PROFILE_DATA     – base64-encoded .mobileprovision
+      - name: Import certificate
+        env:
+          SIGNING_CERTIFICATE_P12_DATA: ${{ secrets.SIGNING_CERTIFICATE_P12_DATA }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create a temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
+          KEYCHAIN_PASSWORD=tempkeychain123
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          echo "$SIGNING_CERTIFICATE_P12_DATA" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 \
+            -P "$SIGNING_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain
+
+      - name: Install provisioning profile
+        env:
+          PROVISIONING_PROFILE_DATA: ${{ secrets.PROVISIONING_PROFILE_DATA }}
+        run: |
+          PP_PATH=$RUNNER_TEMP/profile.mobileprovision
+          echo "$PROVISIONING_PROFILE_DATA" | base64 --decode > "$PP_PATH"
+          PP_UUID=$(security cms -D -i "$PP_PATH" | plutil -extract UUID raw -)
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PP_UUID".mobileprovision
+          echo "✅ Provisioning profile installed: $PP_UUID"
+
+      # ── 4. Create ExportOptions.plist ──────────────────────────────────
+      - name: Create ExportOptions.plist
+        run: |
+          METHOD="${{ github.event.inputs.export_method || 'development' }}"
+          mkdir -p build
+          cat > build/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>$METHOD</string>
+              <key>teamID</key>
+              <string>${{ secrets.APPLE_TEAM_ID }}</string>
+              <key>compileBitcode</key>
+              <false/>
+              <key>stripSwiftSymbols</key>
+              <true/>
+              <key>thinning</key>
+              <string><none></string>
+              <key>signingStyle</key>
+              <string>manual</string>
+          </dict>
+          </plist>
+          EOF
+          cat build/ExportOptions.plist
+
+      # ── 5. Clean ───────────────────────────────────────────────────────
+      - name: Clean build folder
+        run: |
+          xcodebuild clean \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration "$CONFIGURATION"
+
+      # ── 6. Archive ─────────────────────────────────────────────────────
+      - name: Archive app
+        run: |
+          xcodebuild archive \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration "$CONFIGURATION" \
+            -archivePath "$ARCHIVE_PATH" \
+            -destination "generic/platform=iOS" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
+            | xcpretty --color 2>/dev/null || true
+
+          if [ ! -d "$ARCHIVE_PATH" ]; then
+            echo "❌ Archive failed"
+            exit 1
+          fi
+          echo "✅ Archive succeeded: $ARCHIVE_PATH"
+
+      # ── 7. Export IPA ──────────────────────────────────────────────────
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportPath "$EXPORT_PATH" \
+            -exportOptionsPlist build/ExportOptions.plist \
+            | xcpretty --color 2>/dev/null || true
+
+          IPA=$(find "$EXPORT_PATH" -name "*.ipa" | head -1)
+          if [ -z "$IPA" ]; then
+            echo "❌ IPA not found in $EXPORT_PATH"
+            ls -la "$EXPORT_PATH" || true
+            exit 1
+          fi
+          echo "✅ IPA exported: $IPA"
+          echo "IPA_PATH=$IPA" >> $GITHUB_ENV
+
+      # ── 8. Upload IPA as artifact ──────────────────────────────────────
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GlucoseDirectApp-IPA
+          path: ${{ env.EXPORT_PATH }}/*.ipa
+          retention-days: 30
+          if-no-files-found: error
+
+      # ── 9. (Optional) Upload to TestFlight ────────────────────────────
+      # Uncomment and add secrets APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD to enable
+      # - name: Upload to TestFlight
+      #   uses: apple-actions/upload-testflight-build@v1
+      #   with:
+      #     app-path: ${{ env.IPA_PATH }}
+      #     issuer-id: ${{ secrets.APPLE_ISSUER_ID }}
+      #     api-key-id: ${{ secrets.APPLE_API_KEY_ID }}
+      #     api-private-key: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+
+      # ── 10. Cleanup keychain ───────────────────────────────────────────
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/signing.keychain-db || true

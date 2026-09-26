@@ -2,6 +2,8 @@
 //  Widget.swift
 //  GlucoseDirectApp
 //
+//  Updated to pass Live Activity display options (showValue, showTrend, showLastUpdate) through content state.
+//
 
 import ActivityKit
 import Combine
@@ -24,7 +26,7 @@ private func widgetCenterMiddleware(service: LazyService<ActivityGlucoseService>
                 break
             }
 
-            service.value.start(alarmLow: state.alarmLow, alarmHigh: state.alarmHigh, sensorState: state.sensor?.state, connectionState: state.connectionState, glucose: state.latestSensorGlucose, glucoseUnit: state.glucoseUnit)
+            service.value.start(state: state)
 
         case .setGlucoseUnit(unit: _):
             guard state.glucoseLiveActivity else {
@@ -39,10 +41,10 @@ private func widgetCenterMiddleware(service: LazyService<ActivityGlucoseService>
                 service.value.stop()
 
             } else if service.value.restartRecommended || service.value.startRequired, state.appState == .active {
-                service.value.start(alarmLow: state.alarmLow, alarmHigh: state.alarmHigh, sensorState: state.sensor?.state, connectionState: state.connectionState, glucose: state.latestSensorGlucose, glucoseUnit: state.glucoseUnit)
+                service.value.start(state: state)
 
             } else if !service.value.startRequired {
-                service.value.update(alarmLow: state.alarmLow, alarmHigh: state.alarmHigh, sensorState: state.sensor?.state, connectionState: state.connectionState, glucose: state.latestSensorGlucose, glucoseUnit: state.glucoseUnit)
+                service.value.update(state: state)
             }
 
         case .setGlucoseLiveActivity(enabled: let enabled):
@@ -51,10 +53,17 @@ private func widgetCenterMiddleware(service: LazyService<ActivityGlucoseService>
                     break
                 }
 
-                service.value.start(alarmLow: state.alarmLow, alarmHigh: state.alarmHigh, sensorState: state.sensor?.state, connectionState: state.connectionState, glucose: state.latestSensorGlucose, glucoseUnit: state.glucoseUnit)
+                service.value.start(state: state)
             } else {
                 service.value.stop()
             }
+
+        // Propagate display option changes immediately
+        case .setLiveActivityShowValue, .setLiveActivityShowTrend, .setLiveActivityShowLastUpdate:
+            guard state.glucoseLiveActivity, !service.value.startRequired else {
+                break
+            }
+            service.value.update(state: state)
 
         case .setAppState(appState: let appState):
             guard appState == .active else {
@@ -72,7 +81,7 @@ private func widgetCenterMiddleware(service: LazyService<ActivityGlucoseService>
             }
 
             if service.value.restartRecommended || service.value.startRequired {
-                service.value.start(alarmLow: state.alarmLow, alarmHigh: state.alarmHigh, sensorState: state.sensor?.state, connectionState: state.connectionState, glucose: state.latestSensorGlucose, glucoseUnit: state.glucoseUnit)
+                service.value.start(state: state)
             }
 
         case .setConnectionState(connectionState: _):
@@ -88,10 +97,10 @@ private func widgetCenterMiddleware(service: LazyService<ActivityGlucoseService>
                 service.value.stop()
 
             } else if service.value.restartRecommended || service.value.startRequired, state.appState == .active {
-                service.value.start(alarmLow: state.alarmLow, alarmHigh: state.alarmHigh, sensorState: state.sensor?.state, connectionState: state.connectionState, glucose: state.latestSensorGlucose, glucoseUnit: state.glucoseUnit)
+                service.value.start(state: state)
 
             } else if !service.value.startRequired {
-                service.value.update(alarmLow: state.alarmLow, alarmHigh: state.alarmHigh, sensorState: state.sensor?.state, connectionState: state.connectionState, glucose: state.latestSensorGlucose, glucoseUnit: state.glucoseUnit)
+                service.value.update(state: state)
             }
 
         case .addSensorGlucose(glucoseValues: _):
@@ -107,10 +116,10 @@ private func widgetCenterMiddleware(service: LazyService<ActivityGlucoseService>
                 service.value.stop()
 
             } else if service.value.restartRecommended || service.value.startRequired, state.appState == .active {
-                service.value.start(alarmLow: state.alarmLow, alarmHigh: state.alarmHigh, sensorState: state.sensor?.state, connectionState: state.connectionState, glucose: state.latestSensorGlucose, glucoseUnit: state.glucoseUnit)
+                service.value.start(state: state)
 
             } else if !service.value.startRequired {
-                service.value.update(alarmLow: state.alarmLow, alarmHigh: state.alarmHigh, sensorState: state.sensor?.state, connectionState: state.connectionState, glucose: state.latestSensorGlucose, glucoseUnit: state.glucoseUnit)
+                service.value.update(state: state)
             }
 
         default:
@@ -157,7 +166,7 @@ private class ActivityGlucoseService {
         return activity == nil
     }
 
-    func start(alarmLow: Int, alarmHigh: Int, sensorState: SensorState?, connectionState: SensorConnectionState, glucose: SensorGlucose?, glucoseUnit: GlucoseUnit) {
+    func start(state: DirectState) {
         Task {
             let activities = Activity<SensorGlucoseActivityAttributes>.activities
             for activity in activities {
@@ -170,7 +179,7 @@ private class ActivityGlucoseService {
                 activityStop = Date() + 8 * 60 * 60
 
                 let activityAttributes = SensorGlucoseActivityAttributes()
-                let initialContentState = getStatus(alarmLow: alarmLow, alarmHigh: alarmHigh, sensorState: sensorState, connectionState: connectionState, glucose: glucose, glucoseUnit: glucoseUnit)
+                let initialContentState = getStatus(state: state)
 
                 activity = try Activity<SensorGlucoseActivityAttributes>.request(
                     attributes: activityAttributes,
@@ -188,13 +197,13 @@ private class ActivityGlucoseService {
         }
     }
 
-    func update(alarmLow: Int, alarmHigh: Int, sensorState: SensorState?, connectionState: SensorConnectionState, glucose: SensorGlucose?, glucoseUnit: GlucoseUnit) {
+    func update(state: DirectState) {
         guard let activity = activity else {
             return
         }
 
         Task {
-            let updatedStatus = getStatus(alarmLow: alarmLow, alarmHigh: alarmHigh, sensorState: sensorState, connectionState: connectionState, glucose: glucose, glucoseUnit: glucoseUnit)
+            let updatedStatus = getStatus(state: state)
             await activity.update(using: updatedStatus)
         }
     }
@@ -224,7 +233,20 @@ private class ActivityGlucoseService {
         return SensorGlucoseActivityAttributes.GlucoseStatus(alarmLow: 0, alarmHigh: 0)
     }
 
-    private func getStatus(alarmLow: Int, alarmHigh: Int, sensorState: SensorState?, connectionState: SensorConnectionState, glucose: SensorGlucose?, glucoseUnit: GlucoseUnit) -> SensorGlucoseActivityAttributes.GlucoseStatus {
-        return SensorGlucoseActivityAttributes.GlucoseStatus(alarmLow: alarmLow, alarmHigh: alarmHigh, sensorState: sensorState, connectionState: connectionState, glucose: glucose, glucoseUnit: glucoseUnit, startDate: activityStart, restartDate: activityRestart, stopDate: activityStop)
+    private func getStatus(state: DirectState) -> SensorGlucoseActivityAttributes.GlucoseStatus {
+        return SensorGlucoseActivityAttributes.GlucoseStatus(
+            alarmLow: state.alarmLow,
+            alarmHigh: state.alarmHigh,
+            sensorState: state.sensor?.state,
+            connectionState: state.connectionState,
+            glucose: state.latestSensorGlucose,
+            glucoseUnit: state.glucoseUnit,
+            startDate: activityStart,
+            restartDate: activityRestart,
+            stopDate: activityStop,
+            showValue: state.liveActivityShowValue,
+            showTrend: state.liveActivityShowTrend,
+            showLastUpdate: state.liveActivityShowLastUpdate
+        )
     }
 }

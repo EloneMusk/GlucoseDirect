@@ -302,6 +302,15 @@ func directReducer(state: inout DirectState, action: DirectAction) {
     case .setShowInsulinInput(enabled: let enabled):
         state.showInsulinInput = enabled
 
+    case .setLiveActivityShowValue(enabled: let enabled):
+        state.liveActivityShowValue = enabled
+
+    case .setLiveActivityShowTrend(enabled: let enabled):
+        state.liveActivityShowTrend = enabled
+
+    case .setLiveActivityShowLastUpdate(enabled: let enabled):
+        state.liveActivityShowLastUpdate = enabled
+
     default:
         break
     }

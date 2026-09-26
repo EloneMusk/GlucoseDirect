@@ -2,6 +2,8 @@
 //  SensorGlucoseActivityAttributes.swift
 //  GlucoseDirect
 //
+//  Extended with Live Activity display options (showValue, showTrend, showLastUpdate).
+//
 
 import ActivityKit
 import Foundation
@@ -25,5 +27,10 @@ struct SensorGlucoseActivityAttributes: ActivityAttributes {
         var startDate: Date?
         var restartDate: Date?
         var stopDate: Date?
+
+        // Configurable display options
+        var showValue: Bool = true
+        var showTrend: Bool = true
+        var showLastUpdate: Bool = true
     }
 }

@@ -2,6 +2,9 @@
 //  GlucoseActivityWidget.swift
 //  GlucoseDirect
 //
+//  Redesigned Live Activity with modern pill-style layout and configurable display options.
+//  Also supports CarPlay via the same lock-screen view.
+//
 
 import ActivityKit
 import SwiftUI
@@ -13,7 +16,8 @@ import WidgetKit
 struct GlucoseActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: SensorGlucoseActivityAttributes.self) { context in
-            GlucoseActivityView(context: context.state)
+            // Lock Screen / CarPlay Live Activity banner
+            GlucoseActivityBannerView(context: context.state)
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.center) {
@@ -22,40 +26,45 @@ struct GlucoseActivityWidget: Widget {
             } compactLeading: {
                 if let latestGlucose = context.state.glucose,
                    let glucoseUnit = context.state.glucoseUnit,
-                   let connectionState = context.state.connectionState
+                   let connectionState = context.state.connectionState,
+                   context.state.showValue
                 {
-                    VStack(alignment: .trailing) {
+                    VStack(alignment: .trailing, spacing: 0) {
                         Text(latestGlucose.glucoseValue.asGlucose(glucoseUnit: glucoseUnit))
-                            .font(.body)
-                            .fontWeight(.bold)
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
                             .strikethrough(connectionState != .connected, color: Color.ui.red)
 
                         Text(glucoseUnit.shortLocalizedDescription)
-                            .font(.system(size: 12))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.secondary)
                     }.padding(.leading, 7.5)
                 }
             } compactTrailing: {
                 if let latestGlucose = context.state.glucose,
-                   let glucoseUnit = context.state.glucoseUnit
+                   let glucoseUnit = context.state.glucoseUnit,
+                   context.state.showTrend
                 {
-                    VStack(alignment: .trailing) {
+                    VStack(alignment: .trailing, spacing: 0) {
                         Text(latestGlucose.trend.description)
-                            .font(.body)
-                            .fontWeight(.bold)
+                            .font(.system(size: 15, weight: .bold))
 
-                        if let minuteChange = latestGlucose.minuteChange?.asShortMinuteChange(glucoseUnit: glucoseUnit), latestGlucose.trend != .unknown {
+                        if let minuteChange = latestGlucose.minuteChange?.asShortMinuteChange(glucoseUnit: glucoseUnit),
+                           latestGlucose.trend != .unknown
+                        {
                             Text(minuteChange)
-                                .font(.system(size: 12))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
                         }
                     }.padding(.trailing, 7.5)
                 }
             } minimal: {
                 if let latestGlucose = context.state.glucose,
                    let glucoseUnit = context.state.glucoseUnit,
-                   let connectionState = context.state.connectionState
+                   let connectionState = context.state.connectionState,
+                   context.state.showValue
                 {
                     Text(latestGlucose.glucoseValue.asGlucose(glucoseUnit: glucoseUnit))
-                        .font(.body)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
                         .strikethrough(connectionState != .connected, color: Color.ui.red)
                 }
             }
@@ -88,16 +97,14 @@ extension GlucoseStatusContext {
         if glucose.glucoseValue < context.alarmLow || glucose.glucoseValue > context.alarmHigh {
             return true
         }
-
         return false
     }
 
-    func getGlucoseColor(glucose: any Glucose) -> Color {
-        if isAlarm(glucose: glucose) {
-            return Color.ui.red
-        }
-
-        return Color.primary
+    func glucoseStatusColor(glucose: any Glucose) -> Color {
+        let g = glucose.glucoseValue
+        if g < context.alarmLow { return Color(red: 1.0, green: 0.55, blue: 0.0) }
+        if g > context.alarmHigh { return Color.ui.red }
+        return Color.ui.purple
     }
 }
 
@@ -108,155 +115,171 @@ struct DynamicIslandCenterView: View, GlucoseStatusContext {
     @State var context: SensorGlucoseActivityAttributes.GlucoseStatus
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 4) {
             if let latestGlucose = context.glucose, let glucoseUnit = context.glucoseUnit {
-                HStack(alignment: .lastTextBaseline, spacing: 20) {
-                    if latestGlucose.type != .high {
-                        Text(verbatim: latestGlucose.glucoseValue.asGlucose(glucoseUnit: glucoseUnit))
-                            .font(.system(size: 64))
-                            .foregroundColor(getGlucoseColor(glucose: latestGlucose))
-
-                        VStack(alignment: .leading) {
-                            Text(verbatim: latestGlucose.trend.description)
-                                .font(.system(size: 34))
-
-                            if let minuteChange = latestGlucose.minuteChange?.asMinuteChange(glucoseUnit: glucoseUnit) {
-                                Text(verbatim: minuteChange)
-                            } else {
-                                Text(verbatim: "?")
-                            }
+                HStack(alignment: .lastTextBaseline, spacing: 8) {
+                    if context.showValue {
+                        if latestGlucose.type != .high {
+                            Text(verbatim: latestGlucose.glucoseValue.asGlucose(glucoseUnit: glucoseUnit))
+                                .font(.system(size: 56, weight: .black, design: .rounded))
+                                .foregroundColor(glucoseStatusColor(glucose: latestGlucose))
+                        } else {
+                            Text("HIGH")
+                                .font(.system(size: 44, weight: .black, design: .rounded))
+                                .foregroundColor(Color.ui.red)
                         }
-                    } else {
-                        Text("HIGH")
-                            .font(.system(size: 64))
-                            .foregroundColor(getGlucoseColor(glucose: latestGlucose))
+                    }
+
+                    if context.showTrend {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(verbatim: latestGlucose.trend.description)
+                                .font(.system(size: 28, weight: .bold))
+                                .foregroundColor(glucoseStatusColor(glucose: latestGlucose))
+                        }
+                        .padding(.bottom, 8)
                     }
                 }
 
                 if let warning = warning {
                     Text(verbatim: warning)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.ui.red)
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.ui.red))
                 } else {
-                    HStack(spacing: 40) {
-                        Text(latestGlucose.timestamp, style: .time)
-                        Text(verbatim: glucoseUnit.localizedDescription)
-                    }.opacity(0.5)
+                    HStack(spacing: 12) {
+                        if context.showValue {
+                            Text(verbatim: glucoseUnit.localizedDescription)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        if context.showLastUpdate {
+                            Text(latestGlucose.timestamp, style: .time)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
-
             } else {
                 Text("No Data")
-                    .font(.system(size: 34))
+                    .font(.system(size: 28, weight: .black, design: .rounded))
                     .foregroundColor(Color.ui.red)
 
                 Text(Date(), style: .time)
-                    .opacity(0.5)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
             }
-        }.padding(.bottom)
+        }
+        .padding(.bottom, 4)
     }
 }
 
-// MARK: - GlucoseActivityView
+// MARK: - GlucoseActivityBannerView (Lock Screen + CarPlay)
 
 @available(iOS 16.1, *)
-struct GlucoseActivityView: View, GlucoseStatusContext {
+struct GlucoseActivityBannerView: View, GlucoseStatusContext {
     @State var context: SensorGlucoseActivityAttributes.GlucoseStatus
 
     var body: some View {
-        HStack(alignment: .lastTextBaseline) {
-            Spacer()
-
+        HStack(spacing: 0) {
+            // Left: glucose value + trend
             if let latestGlucose = context.glucose, let glucoseUnit = context.glucoseUnit {
-                VStack {
-                    HStack(alignment: .top) {
-                        Group {
-                            if latestGlucose.type != .high {
-                                Text(verbatim: latestGlucose.glucoseValue.asGlucose(glucoseUnit: glucoseUnit))
-                            } else {
-                                Text("HIGH")
-                            }
-                        }
-                        .bold()
-                        .foregroundColor(getGlucoseColor(glucose: latestGlucose))
-                        .font(.system(size: 40))
-                        
-                        Text(verbatim: latestGlucose.trend.description)
-                            .foregroundColor(getGlucoseColor(glucose: latestGlucose))
-                            .font(.system(size: 32))
-                    }
-                    
-                    if let warning = warning {
-                        HStack {
-                            Image(systemName: "exclamationmark.triangle")
-                                .foregroundColor(Color.ui.red)
-                            
-                            Text(verbatim: warning)
-                                .bold()
-                        }
-                        .font(.footnote)
-                    } else {
-                        HStack {
-                            Text(verbatim: glucoseUnit.localizedDescription)
-                            
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .lastTextBaseline, spacing: 6) {
+                        if context.showValue {
                             Group {
-                                if let minuteChange = latestGlucose.minuteChange?.asMinuteChange(glucoseUnit: glucoseUnit) {
-                                    Text(verbatim: minuteChange)
+                                if latestGlucose.type != .high {
+                                    Text(verbatim: latestGlucose.glucoseValue.asGlucose(glucoseUnit: glucoseUnit))
                                 } else {
-                                    Text(verbatim: "?")
+                                    Text("HIGH")
                                 }
                             }
+                            .font(.system(size: 44, weight: .black, design: .rounded))
+                            .foregroundColor(glucoseStatusColor(glucose: latestGlucose))
                         }
-                        .opacity(0.5)
-                        .font(.footnote)
+
+                        if context.showTrend {
+                            Text(verbatim: latestGlucose.trend.description)
+                                .font(.system(size: 28, weight: .bold))
+                                .foregroundColor(glucoseStatusColor(glucose: latestGlucose))
+                                .padding(.bottom, 6)
+                        }
+                    }
+
+                    // Status row
+                    if let warning = warning {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(Color.ui.red)
+                            Text(verbatim: warning)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(Color.ui.red)
+                        }
+                    } else {
+                        HStack(spacing: 8) {
+                            if context.showValue {
+                                Text(verbatim: glucoseUnit.localizedDescription)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(.secondary)
+                            }
+                            if let minuteChange = latestGlucose.minuteChange?.asMinuteChange(glucoseUnit: glucoseUnit) {
+                                Text(verbatim: minuteChange)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                     }
                 }
-                
+
                 Spacer()
 
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 10) {
+                // Right: last updated time
+                if context.showLastUpdate {
+                    VStack(alignment: .trailing, spacing: 4) {
                         Text("Updated")
-                            .opacity(0.5)
-                            .textCase(.uppercase)
-                        
-                        Text(latestGlucose.timestamp, style: .time)
-                            .bold()
-                            .monospacedDigit()
-                    }
-                    
-                    if let stopDate = context.stopDate {
-                        Text("Reopen app in")
-                            .opacity(0.5)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.secondary)
                             .textCase(.uppercase)
 
-                        Text(stopDate, style: .relative)
-                            .bold()
-                            .multilineTextAlignment(.leading)
+                        Text(latestGlucose.timestamp, style: .time)
+                            .font(.system(size: 13, weight: .bold))
                             .monospacedDigit()
+
+                        // Relative time
+                        HStack(spacing: 2) {
+                            Text(latestGlucose.timestamp, style: .relative)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.trailing)
+                            Text("ago")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
-                .font(.footnote)
-                .frame(maxWidth: 175)
 
             } else {
-                VStack(spacing: 10) {
+                // No data
+                VStack(alignment: .leading, spacing: 4) {
                     Text("No Data")
-                        .bold()
-                        .font(.system(size: 35))
+                        .font(.system(size: 32, weight: .black, design: .rounded))
                         .foregroundColor(Color.ui.red)
 
                     Text(Date(), style: .time)
-                        .opacity(0.5)
-                        .font(.footnote)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.secondary)
                 }
 
                 Spacer()
             }
         }
-        .padding(.top, 5)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(
+            Color(.systemBackground)
+        )
     }
 }
 
@@ -265,7 +288,8 @@ struct GlucoseActivityView: View, GlucoseStatusContext {
 @available(iOS 16.1, *)
 struct GlucoseActivityWidget_Previews: PreviewProvider {
     static var previews: some View {
-        GlucoseActivityView(
+        // No data state
+        GlucoseActivityBannerView(
             context: SensorGlucoseActivityAttributes.GlucoseStatus(
                 alarmLow: 80,
                 alarmHigh: 160,
@@ -274,21 +298,46 @@ struct GlucoseActivityWidget_Previews: PreviewProvider {
                 glucoseUnit: .mgdL,
                 startDate: Date(),
                 restartDate: Date(),
-                stopDate: Date()
+                stopDate: Date(),
+                showValue: true,
+                showTrend: true,
+                showLastUpdate: true
             )
         ).previewContext(WidgetPreviewContext(family: .systemMedium))
 
-        GlucoseActivityView(
+        // Normal glucose
+        GlucoseActivityBannerView(
             context: SensorGlucoseActivityAttributes.GlucoseStatus(
                 alarmLow: 80,
                 alarmHigh: 160,
                 sensorState: .ready,
                 connectionState: .connected,
-                glucose: SensorGlucose(glucoseValue: 120, minuteChange: 2),
+                glucose: SensorGlucose(glucoseValue: 107, minuteChange: -0.5),
                 glucoseUnit: .mgdL,
                 startDate: Date(),
                 restartDate: Date(),
-                stopDate: Date()
+                stopDate: Date(),
+                showValue: true,
+                showTrend: true,
+                showLastUpdate: true
+            )
+        ).previewContext(WidgetPreviewContext(family: .systemMedium))
+
+        // Show only value (no trend, no time)
+        GlucoseActivityBannerView(
+            context: SensorGlucoseActivityAttributes.GlucoseStatus(
+                alarmLow: 80,
+                alarmHigh: 160,
+                sensorState: .ready,
+                connectionState: .connected,
+                glucose: SensorGlucose(glucoseValue: 185, minuteChange: 1.2),
+                glucoseUnit: .mgdL,
+                startDate: Date(),
+                restartDate: Date(),
+                stopDate: Date(),
+                showValue: true,
+                showTrend: false,
+                showLastUpdate: false
             )
         ).previewContext(WidgetPreviewContext(family: .systemMedium))
     }

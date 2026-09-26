@@ -93,6 +93,9 @@ enum DirectAction {
     case setStatisticsDays(days: Int)
     case setShowSmoothedGlucose(enabled: Bool)
     case setShowInsulinInput(enabled: Bool)
+    case setLiveActivityShowValue(enabled: Bool)
+    case setLiveActivityShowTrend(enabled: Bool)
+    case setLiveActivityShowLastUpdate(enabled: Bool)
     case startup
     case shutdown
 

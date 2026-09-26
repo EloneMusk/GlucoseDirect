@@ -69,6 +69,10 @@ protocol DirectState {
     var transmitter: Transmitter? { get set }
     var showSmoothedGlucose: Bool { get set }
     var showInsulinInput: Bool { get set }
+    // Live Activity display options
+    var liveActivityShowValue: Bool { get set }
+    var liveActivityShowTrend: Bool { get set }
+    var liveActivityShowLastUpdate: Bool { get set }
 }
 
 extension DirectState {

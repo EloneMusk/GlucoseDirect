@@ -78,6 +78,9 @@ struct AppState: DirectState {
         self.transmitter = UserDefaults.shared.transmitter
         self.showSmoothedGlucose = UserDefaults.standard.showSmoothedGlucose
         self.showInsulinInput = UserDefaults.standard.showInsulinInput
+        self.liveActivityShowValue = UserDefaults.standard.liveActivityShowValue
+        self.liveActivityShowTrend = UserDefaults.standard.liveActivityShowTrend
+        self.liveActivityShowLastUpdate = UserDefaults.standard.liveActivityShowLastUpdate
     }
 
     // MARK: Internal
@@ -147,4 +150,7 @@ struct AppState: DirectState {
     var transmitter: Transmitter? { didSet { UserDefaults.shared.transmitter = transmitter } }
     var showSmoothedGlucose: Bool { didSet { UserDefaults.standard.showSmoothedGlucose = showSmoothedGlucose } }
     var showInsulinInput: Bool { didSet { UserDefaults.standard.showInsulinInput = showInsulinInput } }
+    var liveActivityShowValue: Bool { didSet { UserDefaults.standard.liveActivityShowValue = liveActivityShowValue } }
+    var liveActivityShowTrend: Bool { didSet { UserDefaults.standard.liveActivityShowTrend = liveActivityShowTrend } }
+    var liveActivityShowLastUpdate: Bool { didSet { UserDefaults.standard.liveActivityShowLastUpdate = liveActivityShowLastUpdate } }
 }

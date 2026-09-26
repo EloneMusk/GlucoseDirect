@@ -55,6 +55,10 @@ private enum Keys: String {
     case showAnnotations = "libre-direct.settings.show-annotations"
     case showSmoothedGlucose = "libre-direct.settings.smooth-chart-values"
     case showInsulinInput = "libre-direct.settings.show-insulin-delivery-input"
+    // Live Activity display options
+    case liveActivityShowValue = "libre-direct.settings.live-activity-show-value"
+    case liveActivityShowTrend = "libre-direct.settings.live-activity-show-trend"
+    case liveActivityShowLastUpdate = "libre-direct.settings.live-activity-show-last-update"
 }
 
 extension UserDefaults {
@@ -665,6 +669,42 @@ extension UserDefaults {
         }
         set {
             set(newValue, forKey: Keys.showInsulinInput.rawValue)
+        }
+    }
+
+    var liveActivityShowValue: Bool {
+        get {
+            if object(forKey: Keys.liveActivityShowValue.rawValue) != nil {
+                return bool(forKey: Keys.liveActivityShowValue.rawValue)
+            }
+            return true
+        }
+        set {
+            set(newValue, forKey: Keys.liveActivityShowValue.rawValue)
+        }
+    }
+
+    var liveActivityShowTrend: Bool {
+        get {
+            if object(forKey: Keys.liveActivityShowTrend.rawValue) != nil {
+                return bool(forKey: Keys.liveActivityShowTrend.rawValue)
+            }
+            return true
+        }
+        set {
+            set(newValue, forKey: Keys.liveActivityShowTrend.rawValue)
+        }
+    }
+
+    var liveActivityShowLastUpdate: Bool {
+        get {
+            if object(forKey: Keys.liveActivityShowLastUpdate.rawValue) != nil {
+                return bool(forKey: Keys.liveActivityShowLastUpdate.rawValue)
+            }
+            return true
+        }
+        set {
+            set(newValue, forKey: Keys.liveActivityShowLastUpdate.rawValue)
         }
     }
 }
