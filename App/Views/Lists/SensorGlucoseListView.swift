@@ -139,13 +139,14 @@ struct GlucoseHistoryRow: View {
 
             // Timestamp
             VStack(alignment: .trailing, spacing: 2) {
-                Text(glucose.timestamp, style: .relative)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.trailing)
-                + Text(" ago")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.secondary)
+                HStack(spacing: 2) {
+                    Text(glucose.timestamp, style: .relative)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary) as! Text
+                    Text("ago")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
 
                 Text(glucose.timestamp.toLocalTime())
                     .font(.system(size: 11, weight: .regular))

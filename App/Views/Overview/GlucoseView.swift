@@ -136,12 +136,14 @@ struct GlucoseView: View {
                     Image(systemName: "clock.fill")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary.opacity(0.7))
-                    Text(latestGlucose.timestamp, style: .relative)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.secondary)
-                    + Text(" ago")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.secondary)
+                    HStack(spacing: 2) {
+                        Text(latestGlucose.timestamp, style: .relative)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                        Text("ago")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
                 }
                 .padding(.bottom, 8)
 
